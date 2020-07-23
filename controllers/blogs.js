@@ -18,7 +18,7 @@ blogsRouter.post('/', async (request, response) => {
   }
 
   if(!body.author || !body.title)
-    response.status(400).json({error: 'missing author or title'})
+    return response.status(400).json({error: 'missing author or title'})
 
   const user = await User.findById(decodedToken.id)
 
@@ -33,7 +33,8 @@ blogsRouter.post('/', async (request, response) => {
   const savedBlog = await blog.save()
   user.blogs = user.blogs.concat(savedBlog._id)
   await user.save()
-  response.status(201).json(savedBlog)
+  const returnedBlog = await Blog.findById(savedBlog.id).populate('user', { username: 1, name: 1 })
+  response.status(201).json(returnedBlog)
 })
 
 blogsRouter.delete('/:id', async (request, response) => {
@@ -57,10 +58,32 @@ blogsRouter.delete('/:id', async (request, response) => {
 })
 
 blogsRouter.put('/:id', async (request, response) => {
-  const updatedBlog = request.body
+  const body = request.body
+  const token = request.token
   const id = request.params.id
-  const updatedResponse = await Blog.findByIdAndUpdate(id, updatedBlog, {new: true})
-  response.json(updatedResponse)
+  const decodedToken = jwt.verify(token, process.env.SECRET)
+
+  if(!token || !decodedToken.id) {
+    return response.status(401).json({ error: 'token missing or invalid' })
+  }
+
+  if(!body.author || !body.title)
+    return response.status(400).json({error: 'missing author or title'})
+
+  const user = await User.findById(decodedToken.id)
+
+  const blog = {
+    author: body.author,
+    title: body.title,
+    url: body.url,
+    likes: body.likes || 0,
+    user: user._id
+  }
+
+  const savedBlog = await Blog.findByIdAndUpdate(id, blog, {new: true}).populate('user', {username: 1, name: 1})
+  user.blogs = user.blogs.concat(savedBlog._id)
+  await user.save()
+  response.status(201).json(savedBlog)
 })
 
 module.exports = blogsRouter
